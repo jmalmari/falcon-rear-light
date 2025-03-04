@@ -123,7 +123,7 @@ void led_rx_start(led_rx_config_t const *config)
 			.invert_in = false,
 			.with_dma = 0, /*!< If set, the driver will allocate an RMT channel with DMA capability */
 			.io_loop_back = 0, /*!< For debug/test, the signal output from the GPIO will be fed to the input path as well */
-			.backup_before_sleep = 0,
+			.allow_pd = 0, // Allow power domain power-off when sleeping.
 		},
 	};
 
