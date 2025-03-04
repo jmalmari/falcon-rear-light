@@ -18,6 +18,9 @@ char const *const TAG = "falcon_ledgen";
 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
 #define LED_STRIP_RMT_RES_HZ  (10 * 1000 * 1000)
 
+#define FALCON_REAR_RED_RUN 30
+#define FALCON_REAR_RED_BRAKE 255
+
 static led_strip_handle_t configure_led(void)
 {
     led_strip_config_t strip_config = {
@@ -110,20 +113,109 @@ static void on_led_in(led_rx_msg_t const *msg)
 	}
 }
 
-static void apply_effect(led_strip_handle_t led_strip, led_rx_msg_t const *const led_in)
+enum panel_state
 {
-	uint8_t const *rgb = led_in->colors;
-	for (unsigned ii = 0; ii < led_in->count / 3; ++ii)
-	{
-		uint8_t gray = ((unsigned)rgb[0] + (unsigned)rgb[1] + (unsigned)rgb[2]) / 3u;
+	mostly_black,
+	mostly_red,
+	other,
+};
 
-		ESP_ERROR_CHECK(led_strip_set_pixel(
-							led_strip, ii,
-							gray,
-							gray,
-							gray));
+static enum panel_state get_panel_state(led_rx_msg_t const *panel)
+{
+	unsigned rgb_avg[3] = {0};
+	uint8_t const *rgb = panel->colors;
+	unsigned num_leds = panel->count / 3;
+	for (unsigned ii = 0; ii < num_leds; ++ii)
+	{
+		rgb_avg[0] += rgb[0];
+		rgb_avg[1] += rgb[1];
+		rgb_avg[2] += rgb[2];
 		rgb += 3;
 	}
+	rgb_avg[0] /= num_leds;
+	rgb_avg[1] /= num_leds;
+	rgb_avg[2] /= num_leds;
+
+	if (rgb_avg[0] <= 1 &&
+		rgb_avg[1] <= 1 &&
+		rgb_avg[2] <= 1)
+	{
+		return mostly_black;
+	}
+	else if (rgb_avg[0] > 1 &&
+			 rgb_avg[1] <= 1 &&
+			 rgb_avg[2] <= 1)
+	{
+		return mostly_red;
+	}
+	else
+	{
+		return other;
+	}
+}
+
+static void apply_effect(led_strip_handle_t led_strip, led_rx_msg_t const *const led_in)
+{
+	struct panel_snapshot
+	{
+		float time;
+		enum panel_state state;
+	};
+
+	static struct panel_snapshot snapshot[3] = {
+		{0, mostly_black},
+		{0, mostly_black},
+		{0, mostly_black},
+	};
+
+	enum panel_state new_state = get_panel_state(led_in);
+
+	static float target = FALCON_REAR_RED_RUN;
+	static float current = FALCON_REAR_RED_RUN;
+	static float t_prev = -1.0f;
+
+	float const t = xTaskGetTickCount() * portTICK_PERIOD_MS / 1000.0f;
+
+	if (t_prev < 0.0f)
+	{
+		t_prev = t;
+	}
+
+	if (new_state != snapshot[2].state)
+	{
+		snapshot[0] = snapshot[1];
+		snapshot[1] = snapshot[2];
+		snapshot[2].time = t;
+		snapshot[2].state = new_state;
+	}
+
+	// Three constituents of red blinking must be found within 1.5s to
+	// maintain solid braking status. This corresponds to stable
+	// frequencies higher than 0.667Hz.
+	if ((t - snapshot[0].time) < 1.5f &&
+		((snapshot[0].state == mostly_red &&
+		  snapshot[1].state == mostly_black &&
+		  snapshot[2].state == mostly_red) ||
+		 (snapshot[0].state == mostly_black &&
+		  snapshot[1].state == mostly_red &&
+		  snapshot[2].state == mostly_black)))
+	{
+		LEDGEN_GPIO_DBG_ISR_ON();
+		target = FALCON_REAR_RED_BRAKE;
+	}
+	else
+	{
+		LEDGEN_GPIO_DBG_ISR_OFF();
+		target = FALCON_REAR_RED_RUN;
+	}
+
+	float const time_constant = 0.3f;
+	float const time_constant_slow = 2.0f;
+	current += (t - t_prev) / (target < current ? time_constant_slow : time_constant) * (target - current);
+	t_prev = t;
+
+	fill(led_strip, current, 0, 0);
+
 	ESP_ERROR_CHECK(led_strip_refresh(led_strip));
 }
 
@@ -158,9 +250,6 @@ static void falcon_idle(led_strip_handle_t led_strip)
 	fill_row(led_strip, 2, gain[2], 0, 0);
 }
 
-#define FALCON_REAR_RED_RUN 50
-#define FALCON_REAR_RED_BRAKE 100
-
 static void falcon_run(led_strip_handle_t led_strip)
 {
 	fill(led_strip, FALCON_REAR_RED_RUN, 0, 0);
@@ -169,7 +258,7 @@ static void falcon_run(led_strip_handle_t led_strip)
 static void falcon_brake(led_strip_handle_t led_strip)
 {
 	unsigned const ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
-	fill(led_strip, ms % 600 < 300 ? FALCON_REAR_RED_BRAKE : 0, 0, 0);
+	fill(led_strip, ms % 1000 < 500 ? FALCON_REAR_RED_BRAKE : 0, 0, 0);
 }
 
 static void show_idle(led_strip_handle_t led_strip)
