@@ -19,7 +19,7 @@ char const *const TAG = "falcon_ledgen";
 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
 #define LED_STRIP_RMT_RES_HZ  (10 * 1000 * 1000)
 
-led_strip_handle_t configure_led(void)
+static led_strip_handle_t configure_led(void)
 {
     led_strip_config_t strip_config = {
         .strip_gpio_num = LED_STRIP_BLINK_GPIO,   // The GPIO that connected to the LED strip's data line
@@ -41,7 +41,7 @@ led_strip_handle_t configure_led(void)
     return led_strip;
 }
 
-uint32_t point_index(unsigned row, unsigned column)
+static uint32_t point_index(unsigned row, unsigned column)
 {
 	if (LED_PANEL_ROWS <= row || LED_PANEL_COLUMNS <= column)
 	{
@@ -50,7 +50,7 @@ uint32_t point_index(unsigned row, unsigned column)
 	return row * LED_PANEL_COLUMNS + column;
 }
 
-void fill_row(led_strip_handle_t led_strip, unsigned row, uint32_t r, uint32_t g, uint32_t b)
+static void fill_row(led_strip_handle_t led_strip, unsigned row, uint32_t r, uint32_t g, uint32_t b)
 {
 	for (unsigned column = 0; column < LED_PANEL_COLUMNS; ++column)
 	{
