@@ -53,10 +53,10 @@ static void receive_task(void *arg)
 
 		static led_rx_msg_t result;
 
-		if (rx_data.num_symbols != LED_STRIP_LED_NUMBERS * 24)
+		// Real device sends 769 symbols.
+		if (rx_data.num_symbols < LED_STRIP_LED_NUMBERS * 24)
 		{
-			// Probably lost sync. Could ESP_LOGI() here but that
-			// takes time and prolongs regaining the sync.
+			ESP_LOGI(TAG, "Lost sync: %u", rx_data.num_symbols);
 			continue;
 		}
 
