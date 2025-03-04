@@ -18,7 +18,7 @@ char const *const TAG = "falcon_ledgen";
 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
 #define LED_STRIP_RMT_RES_HZ  (10 * 1000 * 1000)
 
-#define FALCON_REAR_RED_RUN 30
+#define FALCON_REAR_RED_RUN 20
 #define FALCON_REAR_RED_BRAKE 255
 
 static led_strip_handle_t configure_led(void)
