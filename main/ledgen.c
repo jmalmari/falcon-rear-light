@@ -245,8 +245,8 @@ void app_main(void)
 			idle = true;
 			show_idle(led_strip);
 
-			// Slow down a bit. Helps to not choke the receiver when
-			// using this for test input.
+			// Slow down a bit. Otherwise the receiver will
+			// occasionally lose sync when using this for test input.
 			vTaskDelay(pdMS_TO_TICKS(1));
 		}
     }
