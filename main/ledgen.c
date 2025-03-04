@@ -75,6 +75,14 @@ static void fill_row(led_strip_handle_t led_strip, unsigned row, uint32_t r, uin
 	}
 }
 
+static void fill(led_strip_handle_t led_strip, uint32_t r, uint32_t g, uint32_t b)
+{
+	for (unsigned ii = 0; ii < LED_STRIP_LED_NUMBERS; ++ii)
+	{
+		ESP_ERROR_CHECK(led_strip_set_pixel(led_strip, ii, r, g, b));
+	}
+}
+
 struct ledgen
 {
 	QueueHandle_t led_in_queue;
@@ -119,9 +127,9 @@ static void apply_effect(led_strip_handle_t led_strip, led_rx_msg_t const *const
 	ESP_ERROR_CHECK(led_strip_refresh(led_strip));
 }
 
-static void show_idle(led_strip_handle_t led_strip)
+static void falcon_idle(led_strip_handle_t led_strip)
 {
-	float const speed = 2 * M_PI;
+	float const speed = 2 * M_PI * 0.5;
 	unsigned const gain_min = 20;
 	unsigned const gain_max = 150;
 
@@ -136,9 +144,65 @@ static void show_idle(led_strip_handle_t led_strip)
 		gain = gain_max;
 	}
 
-	fill_row(led_strip, 0, 0, gain, 0);
-	fill_row(led_strip, 1, 0, gain, 0);
-	fill_row(led_strip, 2, 0, gain, 0);
+	fill_row(led_strip, 0, 0, 0, gain);
+	fill_row(led_strip, 1, 0, 0, gain * 2 / gain_min);
+	fill_row(led_strip, 2, 0, 0, gain / gain_min);
+}
+
+#define FALCON_REAR_RED_RUN 50
+#define FALCON_REAR_RED_BRAKE 100
+
+static void falcon_run(led_strip_handle_t led_strip)
+{
+	fill(led_strip, FALCON_REAR_RED_RUN, 0, 0);
+}
+
+static void falcon_brake(led_strip_handle_t led_strip)
+{
+	unsigned const ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+	fill(led_strip, ms % 600 < 300 ? FALCON_REAR_RED_BRAKE : 0, 0, 0);
+}
+
+static void show_idle(led_strip_handle_t led_strip)
+{
+	enum State
+	{
+		idle,
+		run,
+		brake,
+		state_count,
+	};
+
+	static TickType_t state_entered = 0;
+	static enum State state = idle;
+
+	TickType_t const now = xTaskGetTickCount();
+	if (!state_entered)
+	{
+		state_entered = now;
+	}
+
+	if (pdMS_TO_TICKS(3000) <= now - state_entered)
+	{
+		state_entered = now;
+		state = (state + 1) % state_count;
+	}
+
+	switch (state)
+	{
+		case idle:
+			falcon_idle(led_strip);
+			break;
+		case run:
+			falcon_run(led_strip);
+			break;
+		case brake:
+			falcon_brake(led_strip);
+			break;
+		case state_count:
+			return;
+	}
+
 	ESP_ERROR_CHECK(led_strip_refresh(led_strip));
 }
 
