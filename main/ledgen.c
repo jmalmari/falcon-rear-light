@@ -129,24 +129,33 @@ static void apply_effect(led_strip_handle_t led_strip, led_rx_msg_t const *const
 
 static void falcon_idle(led_strip_handle_t led_strip)
 {
-	float const speed = 2 * M_PI * 0.5;
-	unsigned const gain_min = 20;
-	unsigned const gain_max = 150;
+	float const speed[3] = {
+		2 * M_PI * 0.5,
+		2 * M_PI * 1.0,
+		2 * M_PI * 3.0,
+	};
+	unsigned const gain_min[3] = {20, 10, 1};
+	unsigned const gain_max[3] = {150, 100, 50};
 
 	float t = xTaskGetTickCount() * portTICK_PERIOD_MS / 1000.0;
-	int gain = gain_min + ((gain_max - gain_min) / 2.0f) * (1.0f + sinf(t * speed));
-	if (gain < gain_min)
+	int gain[3];
+	for (unsigned ii = 0; ii < 3; ++ii)
 	{
-		gain = gain_min;
-	}
-	else if (gain_max < gain)
-	{
-		gain = gain_max;
+		gain[ii] = gain_min[ii] + ((gain_max[ii] - gain_min[ii]) / 2.0f) * (1.0f + sinf(t * speed[ii]));
+
+		if (gain[ii] < gain_min[ii])
+		{
+			gain[ii] = gain_min[ii];
+		}
+		else if (gain_max[ii] < gain[ii])
+		{
+			gain[ii] = gain_max[ii];
+		}
 	}
 
-	fill_row(led_strip, 0, 0, 0, gain);
-	fill_row(led_strip, 1, 0, 0, gain * 2 / gain_min);
-	fill_row(led_strip, 2, 0, 0, gain / gain_min);
+	fill_row(led_strip, 0, 0, 0, gain[0]);
+	fill_row(led_strip, 1, 0, gain[1], 0);
+	fill_row(led_strip, 2, gain[2], 0, 0);
 }
 
 #define FALCON_REAR_RED_RUN 50
