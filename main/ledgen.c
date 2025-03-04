@@ -67,6 +67,12 @@ static uint32_t point_index(unsigned row, unsigned column)
     {
         return 1;
     }
+	if (row & 1)
+	{
+		// The LED strip zigzags to make a panel.
+		column = LED_PANEL_COLUMNS - column - 1;
+	}
+	row = LED_PANEL_ROWS - row - 1;
     return row * LED_PANEL_COLUMNS + column;
 }
 
