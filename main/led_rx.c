@@ -20,9 +20,7 @@ static bool on_rmt_rx_done(rmt_channel_handle_t rx_chan, const rmt_rx_done_event
 	LEDGEN_GPIO_DBG_ISR_ON();
     BaseType_t high_task_wakeup = pdFALSE;
     QueueHandle_t receive_queue = (QueueHandle_t)user_ctx;
-    // send the received RMT symbols to the parser task
     xQueueSendFromISR(receive_queue, edata, &high_task_wakeup);
-    // return whether any task is woken up
 	LEDGEN_GPIO_DBG_ISR_OFF();
     return high_task_wakeup == pdTRUE;
 }
@@ -46,16 +44,22 @@ static void receive_task(void *arg)
 
 	while(1)
  	{
-		static rmt_symbol_word_t raw_symbols[32 * 24 + 2]; // 64 symbols should be sufficient for a standard NEC frame
-		// ready to receive
+		static rmt_symbol_word_t raw_symbols[LED_STRIP_LED_NUMBERS * 24 + 2];
 		ESP_ERROR_CHECK(rmt_receive(rx_chan, raw_symbols, sizeof(raw_symbols), &rmt_rx_config));
-		// wait for the RX-done signal
 		rmt_rx_done_event_data_t rx_data;
+
 		LEDGEN_GPIO_DBG_IN_OFF();
-		xQueueReceive(receive_queue, &rx_data, portMAX_DELAY);
+		(void)xQueueReceive(receive_queue, &rx_data, portMAX_DELAY);
 		LEDGEN_GPIO_DBG_IN_ON();
 
 		static led_rx_msg_t result;
+
+		if (rx_data.num_symbols != LED_STRIP_LED_NUMBERS * 24)
+		{
+			// Probably lost sync. Could ESP_LOGI() here but that
+			// takes time and prolongs regaining the sync.
+			continue;
+		}
 
 		unsigned const num_leds = rx_data.num_symbols / 24;
 		result.count = num_leds * 3;

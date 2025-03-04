@@ -15,7 +15,6 @@ char const *const TAG = "falcon_ledgen";
 
 #define LED_IN_GPIO 9
 #define LED_STRIP_BLINK_GPIO  2
-#define LED_STRIP_LED_NUMBERS 32
 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
 #define LED_STRIP_RMT_RES_HZ  (10 * 1000 * 1000)
 
@@ -103,6 +102,46 @@ static void on_led_in(led_rx_msg_t const *msg)
 	}
 }
 
+static void apply_effect(led_strip_handle_t led_strip, led_rx_msg_t const *const led_in)
+{
+	uint8_t const *rgb = led_in->colors;
+	for (unsigned ii = 0; ii < led_in->count / 3; ++ii)
+	{
+		uint8_t gray = ((unsigned)rgb[0] + (unsigned)rgb[1] + (unsigned)rgb[2]) / 3u;
+
+		ESP_ERROR_CHECK(led_strip_set_pixel(
+							led_strip, ii,
+							gray,
+							gray,
+							gray));
+		rgb += 3;
+	}
+	ESP_ERROR_CHECK(led_strip_refresh(led_strip));
+}
+
+static void show_idle(led_strip_handle_t led_strip)
+{
+	float const speed = 2 * M_PI;
+	unsigned const gain_min = 20;
+	unsigned const gain_max = 150;
+
+	float t = xTaskGetTickCount() * portTICK_PERIOD_MS / 1000.0;
+	int gain = gain_min + ((gain_max - gain_min) / 2.0f) * (1.0f + sinf(t * speed));
+	if (gain < gain_min)
+	{
+		gain = gain_min;
+	}
+	else if (gain_max < gain)
+	{
+		gain = gain_max;
+	}
+
+	fill_row(led_strip, 0, 0, gain, 0);
+	fill_row(led_strip, 1, 0, gain, 0);
+	fill_row(led_strip, 2, 0, gain, 0);
+	ESP_ERROR_CHECK(led_strip_refresh(led_strip));
+}
+
 void app_main(void)
 {
 	ledgen_init();
@@ -120,48 +159,27 @@ void app_main(void)
 
 	led_rx_start(&rx_config);
 
-	float const speed = 2 * M_PI * 1;
-	unsigned const gain_min = 20;
-	unsigned const gain_max = 150;
+	bool idle = false;
+	TickType_t const idle_timeout = pdMS_TO_TICKS(35);
+	TickType_t last_receive_time = xTaskGetTickCount();
 
     while (1)
 	{
 		LEDGEN_GPIO_DBG_OUT_OFF();
+
 		led_rx_msg_t led_in;
-		if (xQueueReceive(ctx.led_in_queue, &led_in, pdMS_TO_TICKS(35)))
+		if (xQueueReceive(ctx.led_in_queue, &led_in, pdMS_TO_TICKS(0)))
 		{
 			LEDGEN_GPIO_DBG_OUT_ON();
-			uint8_t const *rgb = led_in.colors;
-			for (unsigned ii = 0; ii < led_in.count / 3; ++ii)
-			{
-				uint8_t gray = ((unsigned)rgb[0] + (unsigned)rgb[1] + (unsigned)rgb[2]) / 3u;
-
-				ESP_ERROR_CHECK(led_strip_set_pixel(
-									led_strip, ii,
-									gray,
-									gray,
-									gray));
-				rgb += 3;
-			}
+			idle = false;
+			last_receive_time = xTaskGetTickCount();
+			apply_effect(led_strip, &led_in);
 		}
-		else
+		else if (idle || idle_timeout < xTaskGetTickCount() - last_receive_time)
 		{
 			LEDGEN_GPIO_DBG_OUT_ON();
-			float t = xTaskGetTickCount() * portTICK_PERIOD_MS / 1000.0;
-			int gain = gain_min + ((gain_max - gain_min) / 2.0f) * (1.0f + sinf(t * speed));
-			if (gain < gain_min)
-			{
-				gain = gain_min;
-			}
-			else if (gain_max < gain)
-			{
-				gain = gain_max;
-			}
-
-			fill_row(led_strip, 0, 0, gain, 0);
-			fill_row(led_strip, 1, 0, gain, 0);
-			fill_row(led_strip, 2, 0, gain, 0);
+			idle = true;
+			show_idle(led_strip);
 		}
-		ESP_ERROR_CHECK(led_strip_refresh(led_strip));
     }
 }

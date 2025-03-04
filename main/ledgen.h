@@ -4,6 +4,9 @@
 
 extern char const *const TAG;
 
+#define LED_STRIP_LED_NUMBERS 32
+
+#define LEDGEN_DBG_GPIO
 #ifdef LEDGEN_DBG_GPIO
 
 #define LEDGEN_GPIO_DBG_ISR 10
