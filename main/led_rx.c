@@ -17,11 +17,13 @@ led_rx_receive_fn on_receive = 0;
 
 static bool on_rmt_rx_done(rmt_channel_handle_t rx_chan, const rmt_rx_done_event_data_t *edata, void *user_ctx)
 {
+	LEDGEN_GPIO_DBG_ISR_ON();
     BaseType_t high_task_wakeup = pdFALSE;
     QueueHandle_t receive_queue = (QueueHandle_t)user_ctx;
     // send the received RMT symbols to the parser task
     xQueueSendFromISR(receive_queue, edata, &high_task_wakeup);
     // return whether any task is woken up
+	LEDGEN_GPIO_DBG_ISR_OFF();
     return high_task_wakeup == pdTRUE;
 }
 
@@ -49,7 +51,9 @@ static void receive_task(void *arg)
 		ESP_ERROR_CHECK(rmt_receive(rx_chan, raw_symbols, sizeof(raw_symbols), &rmt_rx_config));
 		// wait for the RX-done signal
 		rmt_rx_done_event_data_t rx_data;
+		LEDGEN_GPIO_DBG_IN_OFF();
 		xQueueReceive(receive_queue, &rx_data, portMAX_DELAY);
+		LEDGEN_GPIO_DBG_IN_ON();
 
 		static led_rx_msg_t result;
 

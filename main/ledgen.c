@@ -41,6 +41,24 @@ static led_strip_handle_t configure_led(void)
     return led_strip;
 }
 
+#ifdef LEDGEN_DBG_GPIO
+static void ledgen_dbg_gpio_init()
+{
+	gpio_num_t const pins[] = {
+		LEDGEN_GPIO_DBG_ISR,
+		LEDGEN_GPIO_DBG_IN,
+		LEDGEN_GPIO_DBG_OUT,
+	};
+
+	for (unsigned ii = 0; ii < sizeof(pins) / sizeof(pins[0]); ++ii)
+	{
+		gpio_reset_pin(pins[ii]);
+		gpio_set_level(pins[ii], 0);
+		gpio_set_direction(pins[ii], GPIO_MODE_OUTPUT);
+	}
+}
+#endif
+
 static uint32_t point_index(unsigned row, unsigned column)
 {
 	if (LED_PANEL_ROWS <= row || LED_PANEL_COLUMNS <= column)
@@ -68,6 +86,10 @@ static struct ledgen ctx = {0};
 static void ledgen_init()
 {
 	ctx.led_in_queue = xQueueCreate(1, sizeof(led_rx_msg_t));
+
+#ifdef LEDGEN_DBG_GPIO
+	ledgen_dbg_gpio_init();
+#endif
 }
 
 static void on_led_in(led_rx_msg_t const *msg)
@@ -104,9 +126,11 @@ void app_main(void)
 
     while (1)
 	{
+		LEDGEN_GPIO_DBG_OUT_OFF();
 		led_rx_msg_t led_in;
 		if (xQueueReceive(ctx.led_in_queue, &led_in, pdMS_TO_TICKS(35)))
 		{
+			LEDGEN_GPIO_DBG_OUT_ON();
 			uint8_t const *rgb = led_in.colors;
 			for (unsigned ii = 0; ii < led_in.count / 3; ++ii)
 			{
@@ -122,6 +146,7 @@ void app_main(void)
 		}
 		else
 		{
+			LEDGEN_GPIO_DBG_OUT_ON();
 			float t = xTaskGetTickCount() * portTICK_PERIOD_MS / 1000.0;
 			int gain = gain_min + ((gain_max - gain_min) / 2.0f) * (1.0f + sinf(t * speed));
 			if (gain < gain_min)
