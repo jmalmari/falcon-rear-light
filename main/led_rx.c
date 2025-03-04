@@ -5,7 +5,6 @@
 #include "esp_log.h"
 #include "ledgen.h"
 
-#define LED_STRIP_RMT_DEFAULT_RESOLUTION 10000000 // 10MHz resolution
 
 #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2
 #define LED_STRIP_RMT_DEFAULT_MEM_BLOCK_SYMBOLS 64
@@ -116,9 +115,8 @@ void led_rx_start(led_rx_config_t const *config)
 {
 	rmt_rx_channel_config_t rx_chan_config = {
 		.gpio_num = config->gpio_num,
-		/*!< Clock source of RMT RX channel, channels in the same group must use the same clock source */
-		.clk_src = config->clk_src ? config->clk_src : RMT_CLK_SRC_DEFAULT,
-	    .resolution_hz = config->resolution_hz ? config->resolution_hz : LED_STRIP_RMT_DEFAULT_RESOLUTION,
+		.clk_src = config->clk_src,
+	    .resolution_hz = config->resolution_hz,
 		.mem_block_symbols = config->mem_block_symbols ? config->mem_block_symbols : LED_STRIP_RMT_DEFAULT_MEM_BLOCK_SYMBOLS,
 		.intr_priority = 0,
 		.flags = {
