@@ -245,9 +245,16 @@ static void falcon_idle(led_strip_handle_t led_strip)
         }
     }
 
-    fill_row(led_strip, 0, 0, 0, gain[0]);
+    fill_row(led_strip, 0, gain[0], 0, 0);
     fill_row(led_strip, 1, 0, gain[1], 0);
-    fill_row(led_strip, 2, gain[2], 0, 0);
+    fill_row(led_strip, 2, 0, 0, gain[2]);
+
+	ESP_ERROR_CHECK(led_strip_set_pixel(led_strip, point_index(0, 0), gain_max[0], 0, 0));
+	ESP_ERROR_CHECK(led_strip_set_pixel(led_strip, point_index(0, LED_PANEL_COLUMNS - 1), gain_min[0], 0, 0));
+	ESP_ERROR_CHECK(led_strip_set_pixel(led_strip, point_index(1, 0), 0, gain_max[1], 0));
+	ESP_ERROR_CHECK(led_strip_set_pixel(led_strip, point_index(1, LED_PANEL_COLUMNS - 1), 0, gain_min[1], 0));
+	ESP_ERROR_CHECK(led_strip_set_pixel(led_strip, point_index(2, 0), 0, 0, gain_max[2]));
+	ESP_ERROR_CHECK(led_strip_set_pixel(led_strip, point_index(2, LED_PANEL_COLUMNS - 1), 0, 0, gain_min[2]));
 }
 
 static void falcon_run(led_strip_handle_t led_strip)
