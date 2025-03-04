@@ -244,6 +244,10 @@ void app_main(void)
 			LEDGEN_GPIO_DBG_OUT_ON();
 			idle = true;
 			show_idle(led_strip);
+
+			// Slow down a bit. Helps to not choke the receiver when
+			// using this for test input.
+			vTaskDelay(pdMS_TO_TICKS(1));
 		}
     }
 }
