@@ -58,8 +58,33 @@ static void fill_row(led_strip_handle_t led_strip, unsigned row, uint32_t r, uin
 	}
 }
 
+struct ledgen
+{
+	QueueHandle_t led_in_queue;
+};
+
+static struct ledgen ctx = {0};
+
+static void ledgen_init()
+{
+	ctx.led_in_queue = xQueueCreate(1, sizeof(led_rx_msg_t));
+}
+
+static void on_led_in(led_rx_msg_t const *msg)
+{
+	if (ctx.led_in_queue)
+	{
+		if (!xQueueSend(ctx.led_in_queue, msg, 0))
+		{
+			ESP_LOGI(TAG, "LED in overflow");
+		}
+	}
+}
+
 void app_main(void)
 {
+	ledgen_init();
+
     led_strip_handle_t led_strip = configure_led();
 
     ESP_LOGI(TAG, "Start Falcon LED strip");
@@ -68,6 +93,7 @@ void app_main(void)
 		.gpio_num = LED_IN_GPIO,
 		.clk_src = RMT_CLK_SRC_DEFAULT,
         .resolution_hz = LED_STRIP_RMT_RES_HZ,
+		.on_receive = on_led_in,
 	};
 
 	led_rx_start(&rx_config);
@@ -78,22 +104,39 @@ void app_main(void)
 
     while (1)
 	{
-		float t = xTaskGetTickCount() * portTICK_PERIOD_MS / 1000.0;
-		int gain = gain_min + ((gain_max - gain_min) / 2.0f) * (1.0f + sinf(t * speed));
-		if (gain < gain_min)
+		led_rx_msg_t led_in;
+		if (xQueueReceive(ctx.led_in_queue, &led_in, pdMS_TO_TICKS(35)))
 		{
-			gain = gain_min;
+			uint8_t const *rgb = led_in.colors;
+			for (unsigned ii = 0; ii < led_in.count / 3; ++ii)
+			{
+				uint8_t gray = ((unsigned)rgb[0] + (unsigned)rgb[1] + (unsigned)rgb[2]) / 3u;
+
+				ESP_ERROR_CHECK(led_strip_set_pixel(
+									led_strip, ii,
+									gray,
+									gray,
+									gray));
+				rgb += 3;
+			}
 		}
-		else if (gain_max < gain)
+		else
 		{
-			gain = gain_max;
+			float t = xTaskGetTickCount() * portTICK_PERIOD_MS / 1000.0;
+			int gain = gain_min + ((gain_max - gain_min) / 2.0f) * (1.0f + sinf(t * speed));
+			if (gain < gain_min)
+			{
+				gain = gain_min;
+			}
+			else if (gain_max < gain)
+			{
+				gain = gain_max;
+			}
+
+			fill_row(led_strip, 0, 0, gain, 0);
+			fill_row(led_strip, 1, 0, gain, 0);
+			fill_row(led_strip, 2, 0, gain, 0);
 		}
-
-
-		fill_row(led_strip, 0, gain, 3, 6);
-		fill_row(led_strip, 1, gain, 0, 0);
-		fill_row(led_strip, 2, gain, 0, 0);
 		ESP_ERROR_CHECK(led_strip_refresh(led_strip));
-		vTaskDelay(pdMS_TO_TICKS(30));
     }
 }

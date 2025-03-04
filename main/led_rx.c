@@ -13,6 +13,8 @@
 #define LED_STRIP_RMT_DEFAULT_MEM_BLOCK_SYMBOLS 48
 #endif
 
+led_rx_receive_fn on_receive = 0;
+
 static bool on_rmt_rx_done(rmt_channel_handle_t rx_chan, const rmt_rx_done_event_data_t *edata, void *user_ctx)
 {
     BaseType_t high_task_wakeup = pdFALSE;
@@ -42,8 +44,6 @@ static void receive_task(void *arg)
 
 	while(1)
  	{
-		ESP_LOGI(TAG, "Waiting LED RX");
-
 		static rmt_symbol_word_t raw_symbols[32 * 24 + 2]; // 64 symbols should be sufficient for a standard NEC frame
 		// ready to receive
 		ESP_ERROR_CHECK(rmt_receive(rx_chan, raw_symbols, sizeof(raw_symbols), &rmt_rx_config));
@@ -51,9 +51,12 @@ static void receive_task(void *arg)
 		rmt_rx_done_event_data_t rx_data;
 		xQueueReceive(receive_queue, &rx_data, portMAX_DELAY);
 
-		unsigned rgb_total[3] = {0};
+		static led_rx_msg_t result;
 
-		for (unsigned color3 = 0; color3 < rx_data.num_symbols / 24; ++color3)
+		unsigned const num_leds = rx_data.num_symbols / 24;
+		result.count = num_leds * 3;
+
+		for (unsigned color3 = 0; color3 < num_leds; ++color3)
 		{
 			rmt_symbol_word_t const *symbol = rx_data.received_symbols + color3 * 24;
 
@@ -68,17 +71,36 @@ static void receive_task(void *arg)
 				}
 			}
 
-			rgb_total[0] += grb[1];
-			rgb_total[1] += grb[0];
-			rgb_total[2] += grb[2];
+			if (color3 < sizeof(result.colors) / 3)
+			{
+				result.colors[color3 * 3 + 0] = grb[1];
+				result.colors[color3 * 3 + 1] = grb[0];
+				result.colors[color3 * 3 + 2] = grb[2];
+			}
 		}
 
-		unsigned num_leds = rx_data.num_symbols / 24;
-		ESP_LOGI(TAG, "Got %u: %u, %u, %u",
-				 num_leds,
-				 (unsigned)rgb_total[0] / num_leds,
-				 (unsigned)rgb_total[1] / num_leds,
-				 (unsigned)rgb_total[2] / num_leds);
+		if (on_receive)
+		{
+			on_receive(&result);
+		}
+
+#undef LED_TRACE
+#ifdef LED_TRACE
+		{
+			unsigned rgb_total[3] = {0};
+			for (unsigned color3 = 0; color3 < num_leds; ++color3)
+			{
+				rgb_total[0] += result.colors[color3 * 3 + 0];
+				rgb_total[1] += result.colors[color3 * 3 + 1];
+				rgb_total[2] += result.colors[color3 * 3 + 2];
+			}
+			ESP_LOGI(TAG, "Got %u: %u, %u, %u",
+					 num_leds,
+					 (unsigned)rgb_total[0] / num_leds,
+					 (unsigned)rgb_total[1] / num_leds,
+					 (unsigned)rgb_total[2] / num_leds);
+		}
+#endif
 	}
 }
 
@@ -100,6 +122,8 @@ void led_rx_start(led_rx_config_t const *config)
 	};
 
 	static rmt_channel_handle_t rx_chan = NULL;
+
+	on_receive = config->on_receive;
 
 	ESP_ERROR_CHECK(rmt_new_rx_channel(&rx_chan_config, &rx_chan));
 
